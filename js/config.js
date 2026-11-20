@@ -4,8 +4,8 @@
    A chave "publishable" do Supabase foi feita para ficar no navegador: a proteção dos dados
    é feita pelas regras de segurança (RLS) do banco. Nunca coloque aqui a chave secreta (service_role). */
 window.SESSIO_CONFIG = {
-  supabaseUrl: '',            // ex.: https://xxxxxxxx.supabase.co  (projeto NOVO, só do Sessio)
-  supabaseKey: '',            // ex.: sb_publishable_...
+  supabaseUrl: 'https://odfgxrlbdgrfdihmurkp.supabase.co',   // projeto Sessio (separado do Rastreios)
+  supabaseKey: 'sb_publishable_nwa38BJI2XcovEG6KNwtxA_F14Ez-9g',   // chave pública (publishable)
   appUrl: '',                 // endereço público do app (opcional); usado no link de confirmação
   checkoutUrl: '',            // link do checkout da Kiwify
   preco: '',                  // ex.: 'R$ 49,90 por mês'
@@ -15,5 +15,5 @@ window.SESSIO_CONFIG = {
   telefone: '+55 (92) 98115-5631',
   foro: 'Manaus/AM',
   termosVersao: '2026-11-20',
-  versao: '2026.11.20-1'      // ao publicar mudanças, atualize aqui e nos ?v= dos arquivos .html
+  versao: '2026.11.20-2'      // ao publicar mudanças, atualize aqui e nos ?v= dos arquivos .html
 };

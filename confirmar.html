@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6B7A4B">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<title>Confirmar horário · Sessio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/sessio.css?v=2026.11.20-1">
+<style>
+  .wrap{max-width:480px}
+  .when{font-family:var(--display);font-size:1.7rem;font-weight:600;color:var(--olive-deep);line-height:1.2}
+  .done-ico{width:58px;height:58px;border-radius:18px;margin:0 auto;display:grid;place-items:center;background:var(--olive-soft);color:var(--olive-deep)}
+  .done-ico svg{width:30px;height:30px}
+  .done-ico.bad{background:color-mix(in srgb,var(--t3) 14%,transparent);color:var(--t3)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"><div class="loading">Carregando…</div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="js/vendor/supabase.min.js?v=2026.11.20-1"></script>
+<script src="js/config.js?v=2026.11.20-1"></script>
+<script src="js/util.js?v=2026.11.20-1"></script>
+<script>
+(async function(){
+  const {$, esc, ico} = U;
+  const CFG = window.SESSIO_CONFIG || {};
+  const LIVE = !!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase);
+  const sb = LIVE ? supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth:{persistSession:false}}) : null;
+  const qs = new URLSearchParams(location.search);
+  const token = qs.get('t') || '';
+  const pedido = qs.get('r');
+  const app = $('#app');
+
+  const rodape = `<footer class="foot"><span class="psi">${U.psi(20)} Sessio · by Psique Ferramentas</span>
+    <span>Esta página mostra apenas o necessário para confirmar seu horário.</span></footer>`;
+  const paint = h => { app.innerHTML = `<header class="topbar" style="justify-content:center"><span class="brand" style="cursor:default"><img src="icons/icon.svg" alt=""><span><span class="brand-name">Sessio</span></span></span></header>${h}${rodape}`; };
+
+  let s = null;
+  if (!LIVE) {
+    const d = U.addDays(new Date(), 1); d.setHours(14, 0, 0, 0);
+    s = {paciente:'Mariana', profissional:'Psicóloga Exemplo', crp:'CRP 20/00000', whatsapp:'92900000000', inicio:d.toISOString(),
+         duracao_min:50, modalidade:'presencial', link:null, status:'agendada', confirmacao:'pendente', fuso:U.fusoLocal(), demo:true};
+  } else if (/^[0-9a-f-]{36}$/i.test(token)) {
+    const {data, error} = await sb.rpc('sessao_publica', {p_token:token});
+    if (!error && data && data.length) s = data[0];
+  }
+
+  if (!s) {
+    paint(`<div class="card stack center"><div class="done-ico bad">${ico.x}</div><h2>Link indisponível</h2>
+      <p class="muted">Este link expirou ou não é válido. Fale diretamente com a(o) profissional que atende você.</p></div>`);
+    return;
+  }
+
+  const tz = s.fuso || 'America/Sao_Paulo';
+  const f = o => new Intl.DateTimeFormat('pt-BR', {timeZone:tz, ...o}).format(new Date(s.inicio));
+  const dia = U.cap(f({weekday:'long', day:'numeric', month:'long'}));
+  const hora = f({hour:'2-digit', minute:'2-digit'});
+  const cidade = tz.split('/').pop().replace(/_/g, ' ');
+  const tzLocal = U.fusoLocal();
+  const quem = esc(s.profissional) + (s.crp ? ` <span class="muted">· ${esc(s.crp)}</span>` : '');
+  const passou = new Date(s.inicio) < new Date();
+  const wa = (txt) => s.whatsapp ? `<a class="btn soft block" href="${esc(U.waLink(s.whatsapp, txt))}" target="_blank" rel="noopener">${ico.whats} Falar com ${esc(U.primeiroNome(s.profissional))} no WhatsApp</a>` : '';
+
+  const resumo = `
+    <div class="stack tight" style="gap:4px">
+      <span class="eyebrow">Seu horário</span>
+      <p class="when">${esc(dia)}<br>às ${esc(hora)}</p>
+      <p class="muted small">Horário de ${esc(cidade)}${tz !== tzLocal ? ' (confira se o seu fuso é diferente)' : ''} · ${s.duracao_min} min · ${s.modalidade === 'online' ? 'on-line' : 'presencial'}</p>
+    </div>
+    <dl class="kv"><dt>Com</dt><dd>${quem}</dd>${s.modalidade === 'online' && s.link ? `<dt>Link</dt><dd><a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link)}</a></dd>` : ''}</dl>`;
+
+  function telaFinal(tipo){
+    const ok = tipo === 'confirmada';
+    paint(`<div class="card stack center">
+      <div class="done-ico ${ok ? '' : 'bad'}">${ok ? ico.check : ico.x}</div>
+      <h2>${ok ? 'Presença <em>confirmada</em>' : 'Pedido de <em>desmarcação</em> enviado'}</h2>
+      <p class="muted">${ok ? `Obrigado, ${esc(s.paciente)}. Até ${esc(dia.toLowerCase())}, às ${esc(hora)}.` : `${esc(U.primeiroNome(s.profissional))} já pode ver seu aviso na agenda. Se quiser remarcar, combine um novo horário diretamente.`}</p>
+      ${ok ? '' : wa(`Olá! Precisei desmarcar o horário de ${dia.toLowerCase()}, às ${hora}. Podemos combinar um novo horário?`)}
+      ${s.demo ? '<p class="tiny muted">Demonstração: nada foi enviado.</p>' : ''}
+    </div>`);
+  }
+
+  async function responder(r){
+    if (s.demo) return telaFinal(r);
+    const {data, error} = await sb.rpc('responder_sessao', {p_token:token, p_resposta:r});
+    if (error || data !== 'ok') { U.toast('Não foi possível registrar. Fale com a(o) profissional.'); return; }
+    s.confirmacao = r; telaFinal(r);
+  }
+
+  function telaPrincipal(){
+    let estado = '';
+    if (s.status !== 'agendada') estado = `<div class="banner bad"><span>Este horário não está mais agendado. Em caso de dúvida, fale com a(o) profissional.</span></div>`;
+    else if (passou) estado = `<div class="banner"><span>Este horário já passou.</span></div>`;
+    else if (s.confirmacao === 'confirmada') estado = `<div class="banner"><span>${ico.check.replace('<svg', '<svg width="16" height="16" style="vertical-align:-3px"')} Você já confirmou sua presença.</span></div>`;
+    else if (s.confirmacao === 'desmarcada') estado = `<div class="banner bad"><span>Você já pediu para desmarcar este horário.</span></div>`;
+    const pode = s.status === 'agendada' && !passou;
+    paint(`<div class="card stack">
+      <h1 style="font-size:1.9rem">Olá, ${esc(s.paciente)}.</h1>
+      ${resumo}${estado}
+      ${pode ? `<div class="stack tight">
+        ${s.confirmacao !== 'confirmada' ? `<button class="btn primary block" id="b-conf">${ico.check} Confirmar presença</button>` : ''}
+        ${s.confirmacao !== 'desmarcada' ? `<button class="btn ${pedido === 'desmarcar' ? 'danger' : 'ghost'} block" id="b-desm">Preciso desmarcar</button>` : ''}
+      </div>` : ''}
+      ${!pode || s.confirmacao === 'desmarcada' ? wa('Olá! Gostaria de falar sobre o meu horário.') : ''}
+    </div>`);
+    const c = $('#b-conf'), d = $('#b-desm');
+    if (c) c.onclick = () => { c.disabled = true; responder('confirmada').finally(() => c.disabled = false); };
+    if (d) d.onclick = telaDesmarcar;
+  }
+
+  function telaDesmarcar(){
+    paint(`<div class="card stack">
+      <span class="eyebrow">Desmarcar</span><h2>Tem certeza?</h2>
+      <p class="muted">Vamos avisar ${esc(U.primeiroNome(s.profissional))} que você não poderá comparecer ${esc(dia.toLowerCase())}, às ${esc(hora)}. Combine com ela(e) a política de cancelamento e um novo horário.</p>
+      <div class="stack tight"><button class="btn danger block" id="b-sim">Sim, desmarcar</button><button class="btn ghost block" id="b-nao">Voltar</button></div>
+    </div>`);
+    $('#b-sim').onclick = e => { e.target.disabled = true; responder('desmarcada'); };
+    $('#b-nao').onclick = telaPrincipal;
+  }
+
+  telaPrincipal();
+})();
+</script>
+</body>
+</html>

@@ -185,7 +185,8 @@ revoke insert, update on public.perfis from authenticated;
 grant select on public.perfis to authenticated;
 grant insert (id, nome, crp, whatsapp, fuso, valor_padrao, duracao_padrao, lembrete_auto, lembrete_horas, atualizado_em)
   on public.perfis to authenticated;
-grant update (nome, crp, whatsapp, fuso, valor_padrao, duracao_padrao, lembrete_auto, lembrete_horas, atualizado_em)
+-- id entra porque o app grava o perfil com upsert; a regra acima impede trocar para outro id
+grant update (id, nome, crp, whatsapp, fuso, valor_padrao, duracao_padrao, lembrete_auto, lembrete_horas, atualizado_em)
   on public.perfis to authenticated;
 grant select, insert, update, delete on public.pacientes, public.bloqueios to authenticated;
 -- profissional_id nunca muda depois de criado

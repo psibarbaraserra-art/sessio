@@ -15,5 +15,5 @@ window.SESSIO_CONFIG = {
   telefone: '+55 (92) 98115-5631',
   foro: 'Manaus/AM',
   termosVersao: '2026-11-20',
-  versao: '2026.11.20-3'      // ao publicar mudanças, atualize aqui e nos ?v= dos arquivos .html
+  versao: '2026.11.20-4'      // ao publicar mudanças, atualize aqui e nos ?v= dos arquivos .html
 };

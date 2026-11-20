@@ -61,10 +61,14 @@ U.fFone = s => { const d = U.digits(s).replace(/^55(?=\d{10,11}$)/, ''); if (d.l
 
 /* CRP: região 01 a 24 + número */
 U.normCRP = s => {
-  const m = String(s || '').toUpperCase().replace(/CRP/g, '').match(/(\d{1,2})\s*[\/\-. ]\s*(\d{3,6})/);
+  // aceita "20/13.134", "20/13134", "CRP 20/13.134", "20-13134" ou "20 13134"
+  const t = String(s || '').toUpperCase().replace(/CRP/g, '').trim();
+  const m = t.match(/^(\d{1,2})\s*[\/\-\s]\s*(\d{1,3}(?:\.\d{3})+|\d{3,6})$/);
   if (!m) return '';
   const r = Number(m[1]); if (r < 1 || r > 24) return '';
-  return `CRP ${pad(r)}/${m[2]}`;
+  const n = m[2].replace(/\./g, '');
+  if (n.length < 3 || n.length > 6) return '';
+  return `CRP ${pad(r)}/${n.length > 3 ? n.replace(/\B(?=(\d{3})+$)/g, '.') : n}`;
 };
 U.primeiroNome = s => String(s || '').trim().split(/\s+/)[0] || '';
 U.iniciais = s => { const p = String(s || '').trim().split(/\s+/).filter(Boolean); return ((p[0]||'')[0]||'') + (p.length > 1 ? p[p.length-1][0] : ''); };

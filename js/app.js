@@ -74,6 +74,7 @@ function traduzErro(e){
 
 async function carregarPacientes(){ pacientes = await D.pacientes(); pmap = {}; pacientes.forEach(p => pmap[p.id] = p); }
 const nomeP = id => (pmap[id] && pmap[id].nome) || 'Paciente removido';
+const urlApp = () => (CFG.appUrl ? CFG.appUrl.replace(/\/+$/, '') + '/' : location.href.split('#')[0].split('?')[0]);
 const linkConfirmacao = s => (CFG.appUrl ? CFG.appUrl.replace(/\/+$/, '') + '/' : new URL('.', location.href).href) + 'confirmar.html?t=' + s.token;
 const cobravel = s => D.COBRAVEL.includes(s.status) && s.pagamento !== 'isento';
 const fimDe = s => U.addMin(s.inicio, s.duracao_min);
@@ -679,6 +680,7 @@ V.login = async () => {
       <form class="stack" id="fl" style="text-align:left" novalidate>
         <h3 style="text-align:center">${titulo}</h3>
         ${S.msg ? `<div class="banner"><span>${esc(S.msg)}</span></div>` : ''}
+        ${S.reenviar && modo === 'entrar' ? `<button type="button" class="btn soft block" data-act="reenviar">Reenviar e-mail de confirmação</button>` : ''}
         ${modo === 'criar' ? `
           <label class="f">Nome completo<input class="input" id="l-nome" autocomplete="name" required></label>
           <label class="f">CRP<input class="input" id="l-crp" placeholder="Ex.: 20/12345" required></label>` : ''}
@@ -707,7 +709,7 @@ V.login = async () => {
       const email = $('#l-email').value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return msg('E-mail inválido.');
       if (modo === 'esqueci') {
-        const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo:location.href.split('#')[0].split('?')[0]});
+        const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo:urlApp()});
         if (error) throw error;
         S.msg = 'Se houver uma conta com esse e-mail, você vai receber um link para criar uma nova senha.'; S.modo = 'entrar'; return render();
       }
@@ -718,11 +720,14 @@ V.login = async () => {
         if (nome.split(' ').length < 2) return msg('Informe seu nome completo.');
         if (!crp) return msg('CRP inválido. Use o formato região/número, ex.: 20/12345.');
         if (!$('#l-termos').checked) return msg('É preciso aceitar os Termos e a Política de Privacidade.');
-        const {data, error} = await sb.auth.signUp({email, password:senha, options:{data:{nome, crp, fuso:U.fusoLocal(), aceite_termos:new Date().toISOString(), versao_termos:CFG.termosVersao || ''}}});
+        const {data, error} = await sb.auth.signUp({email, password:senha, options:{emailRedirectTo:urlApp(), data:{nome, crp, fuso:U.fusoLocal(), aceite_termos:new Date().toISOString(), versao_termos:CFG.termosVersao || ''}}});
         if (error) throw error;
         if (!data.session) { S.msg = 'Conta criada. Confirme seu e-mail pelo link que enviamos e depois entre.'; S.modo = 'entrar'; return render(); }
       } else {
         const {error} = await sb.auth.signInWithPassword({email, password:senha});
+        if (error && /Email not confirmed/i.test(error.message || '')) {
+          S.msg = 'Seu e-mail ainda não foi confirmado. Toque em "Reenviar e-mail de confirmação" e abra o link mais recente.'; S.modo = 'entrar'; S.reenviar = email; return render();
+        }
         if (error) throw error;
       }
       marcarUso(); await iniciar();
@@ -752,7 +757,15 @@ const A = {
     $('#' + name).value = el.dataset.v;
     if (onSeg[name]) onSeg[name](el.dataset.v);
   },
-  modo: el => { S.modo = el.dataset.v; S.msg = ''; render(); },
+  modo: el => { S.modo = el.dataset.v; S.msg = ''; S.reenviar = ''; render(); },
+  reenviar: async el => {
+    el.disabled = true;
+    try {
+      const {error} = await sb.auth.resend({type:'signup', email:S.reenviar, options:{emailRedirectTo:urlApp()}});
+      if (error) throw error;
+      S.msg = 'Enviamos um novo e-mail de confirmação para ' + S.reenviar + '. Abra só o link mais recente (confira também o spam).'; S.reenviar = ''; render();
+    } catch(e){ el.disabled = false; U.toast(/rate|seconds|after/i.test(e.message || '') ? 'Aguarde alguns minutos antes de pedir outro e-mail.' : traduzErro(e)); }
+  },
   sessao: el => go('sessao', {id:el.dataset.id, dia:S.dia}),
   'sessao-nova': el => go('sessao', {dia:S.dia, diaNovo:S.view === 'agenda' ? S.dia : null, paciente_id:el.dataset.pac || null}),
   'bloqueio-novo': () => go('bloqueio', {dia:S.dia}),
@@ -882,6 +895,11 @@ async function iniciar(){
     const ultimo = U.store.get('uso', 0);
     const {data} = await sb.auth.getSession();
     const recuperando = /type=recovery/.test(location.hash);
+    if (/error_code=|error=/.test(location.hash)) {
+      const expirou = /otp_expired|expired|invalid/i.test(decodeURIComponent(location.hash));
+      S = {view:'login', msg: expirou ? 'Este link de e-mail expirou ou já foi usado. Se a conta já foi confirmada, é só entrar. Se não, entre com seu e-mail e senha e toque em "Reenviar e-mail de confirmação".' : 'Não foi possível concluir pelo link do e-mail. Tente entrar com seu e-mail e senha.'};
+      try { history.replaceState(null, '', location.pathname); } catch(e){}
+    }
     if (data.session && !recuperando && ultimo && Date.now() - ultimo > IDLE_MS) { await sb.auth.signOut(); S = {view:'login', msg:'Sua sessão foi encerrada após 30 minutos sem uso. Entre de novo.'}; }
     sb.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY') { marcarUso(); go('login', {modo:'nova'}, {replace:true}); } });
     if (recuperando) return;

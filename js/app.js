@@ -4,6 +4,8 @@ const {$, $$, esc, ico} = U;
 const CFG = window.SESSIO_CONFIG || {};
 const LIVE = D.LIVE, sb = D.sb;
 const IDLE_MS = 30 * 60 * 1000;
+// lembretes por e-mail só aparecem depois que o Brevo e a função "lembretes" estiverem configurados
+const EMAIL_ON = !LIVE || CFG.lembretesEmail === true;
 const app = $('#app');
 
 /* ---------- estado ---------- */
@@ -218,10 +220,10 @@ V.sessao = async (t) => {
           <p class="small"><strong>Lembrete e confirmação.</strong> <span class="muted">${esc(confTxt)}${s.confirmacao_em && s.confirmacao !== 'pendente' ? ' em ' + U.fDiaCurto(s.confirmacao_em) + ', ' + U.fHora(s.confirmacao_em) : ''}.</span></p>
           <div class="btn-row">
             <a class="btn soft" ${temFone ? `href="${esc(U.waLink(p.telefone, msgWhats(s)))}" target="_blank" rel="noopener"` : 'aria-disabled="true" style="opacity:.5;pointer-events:none"'}>${ico.whats} WhatsApp</a>
-            <button class="btn soft" data-act="lembrete-email" data-id="${s.id}" ${temMail ? '' : 'disabled'}>${ico.mail} E-mail</button>
+            ${EMAIL_ON ? `<button class="btn soft" data-act="lembrete-email" data-id="${s.id}" ${temMail ? '' : 'disabled'}>${ico.mail} E-mail</button>` : ''}
             <button class="btn ghost" data-act="copiar-link" data-id="${s.id}">${ico.link} Copiar link</button>
           </div>
-          <p class="muted tiny">${!temFone && !temMail ? 'Cadastre telefone ou e-mail na ficha do paciente para enviar lembretes. ' : ''}${s.lembrete_enviado_em ? 'Lembrete por e-mail enviado em ' + U.fDiaCurto(s.lembrete_enviado_em) + ', ' + U.fHora(s.lembrete_enviado_em) + '.' : (perfil && perfil.lembrete_auto && temMail && p.lembretes ? `O e-mail automático sai ${perfil.lembrete_horas} h antes.` : '')}</p>
+          <p class="muted tiny">${!temFone && (!EMAIL_ON || !temMail) ? (EMAIL_ON ? 'Cadastre telefone ou e-mail na ficha do paciente para enviar lembretes. ' : 'Cadastre o telefone na ficha do paciente para enviar o lembrete pelo WhatsApp, ou use "Copiar link". ') : ''}${!EMAIL_ON ? '' : s.lembrete_enviado_em ? 'Lembrete por e-mail enviado em ' + U.fDiaCurto(s.lembrete_enviado_em) + ', ' + U.fHora(s.lembrete_enviado_em) + '.' : (perfil && perfil.lembrete_auto && temMail && p.lembretes ? `O e-mail automático sai ${perfil.lembrete_horas} h antes.` : '')}</p>
         </div>` : ''}
         ${passou && s.status === 'agendada' ? `
         <div class="formsec"><p class="small"><strong>Como foi esta sessão?</strong></p>
@@ -426,10 +428,10 @@ V.pacientes = async (t) => {
   const proxima = {}, devido = {};
   prox.filter(s => s.status === 'agendada').forEach(s => { if (!proxima[s.paciente_id]) proxima[s.paciente_id] = s; });
   pend.forEach(s => devido[s.paciente_id] = (devido[s.paciente_id] || 0) + Number(s.valor));
-  const q = S.q || '', arq = !!S.arq;
   const nArq = pacientes.filter(p => !p.ativo).length;
 
   const lista = () => {
+    const q = S.q || '', arq = !!S.arq;   // lê a busca atual a cada tecla
     const f = pacientes.filter(p => (arq ? !p.ativo : p.ativo) && (!q || U.norm(p.nome).includes(U.norm(q)) || U.digits(p.telefone).includes(U.digits(q) || '#')));
     if (!f.length) return `<div class="empty">${pacientes.length ? 'Nenhum paciente encontrado.' : 'Nenhum paciente cadastrado ainda.'}</div>`;
     return f.map(p => {
@@ -444,8 +446,8 @@ V.pacientes = async (t) => {
   paint(`
     <div class="between"><div class="stack tight" style="gap:2px"><span class="eyebrow">${pacientes.filter(p => p.ativo).length} ativos</span><h2>Pacientes</h2></div>
       <button class="btn primary" data-act="paciente-novo">${ico.plus} Novo</button></div>
-    <div class="search">${ico.search}<input class="input" id="q" type="search" placeholder="Buscar por nome ou telefone" value="${esc(q)}" autocomplete="off"></div>
-    ${nArq ? seg('arq', {'0':'Ativos', '1':`Arquivados (${nArq})`}, arq ? '1' : '0') : ''}
+    <div class="search">${ico.search}<input class="input" id="q" type="search" placeholder="Buscar por nome ou telefone" value="${esc(S.q || '')}" autocomplete="off"></div>
+    ${nArq ? seg('arq', {'0':'Ativos', '1':`Arquivados (${nArq})`}, S.arq ? '1' : '0') : ''}
     <div class="list" id="lp">${lista()}</div>`);
   $('#q').oninput = e => { S.q = e.target.value; history.replaceState(S, ''); $('#lp').innerHTML = lista(); };
   onSeg = {arq: v => { S.arq = v === '1'; history.replaceState(S, ''); $('#lp').innerHTML = lista(); }};
@@ -521,7 +523,7 @@ V.pacienteForm = async (t) => {
         <label class="f">E-mail<input class="input" id="p-mail" type="email" inputmode="email" value="${esc(p.email || '')}"></label>
         <label class="f">Valor por sessão (R$)<input class="input num" id="p-valor" inputmode="decimal" value="${esc(U.valorInput(p.valor_sessao))}" placeholder="${esc(U.valorInput((perfil && perfil.valor_padrao) || 0))} (padrão)"></label>
       </div>
-      <label class="check"><input type="checkbox" id="p-lemb" ${p.lembretes ? 'checked' : ''}> <span>Enviar lembretes automáticos por e-mail<br><span class="muted small">Combine isso com o paciente. Ele confirma ou desmarca por um link, sem precisar de cadastro.</span></span></label>
+      <label class="check" ${EMAIL_ON ? '' : 'hidden'}><input type="checkbox" id="p-lemb" ${p.lembretes ? 'checked' : ''}> <span>Enviar lembretes automáticos por e-mail<br><span class="muted small">Combine isso com o paciente. Ele confirma ou desmarca por um link, sem precisar de cadastro.</span></span></label>
       <label class="f">Observação administrativa <span class="hint">Ex.: responsável financeiro, forma de pagamento combinada. Não registre conteúdo clínico aqui.</span>
         <textarea class="input" id="p-obs" maxlength="1000" rows="3">${esc(p.observacao || '')}</textarea></label>
       <div class="btn-row"><button class="btn primary" type="submit">Salvar</button><button class="btn ghost" type="button" data-act="voltar">Cancelar</button></div>
@@ -629,7 +631,7 @@ V.ajustes = async (t) => {
         </div>
         ${p.fuso && p.fuso !== fusoLocal ? `<p class="muted tiny">Este aparelho está no fuso ${esc(fusoLocal)}. A agenda mostra os horários no fuso do aparelho.</p>` : ''}
       </div>
-      <div class="formsec"><h3>Lembretes por e-mail</h3>
+      <div class="formsec" ${EMAIL_ON ? '' : 'hidden'}><h3>Lembretes por e-mail</h3>
         <label class="check"><input type="checkbox" id="a-auto" ${p.lembrete_auto !== false ? 'checked' : ''}> <span>Enviar automaticamente aos pacientes que têm e-mail e aceitaram receber</span></label>
         <label class="f">Antecedência<select class="input" id="a-horas">${[2, 6, 12, 24, 48, 72].map(h => `<option value="${h}" ${(p.lembrete_horas || 24) === h ? 'selected' : ''}>${h} horas antes</option>`).join('')}</select></label>
         <p class="muted tiny">O e-mail traz a data, o horário e os botões "Confirmar presença" e "Preciso desmarcar". Pelo WhatsApp, o envio é manual, pelo botão da sessão.</p>
